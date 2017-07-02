@@ -44,10 +44,6 @@ def is_coord(value):
 #=================================================================================================
 
 class Touchpad(object):
-    """
-    Get touch data from the TSC2017 touchpad, and optionally transform the coordinates to a different coordinate
-    space.
-    """
 
     #------------------------------------------------------------
     def __init__(self, dll_path=_default_dll_path,
