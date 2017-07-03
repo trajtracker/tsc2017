@@ -8,7 +8,6 @@
 import os
 import time
 import numpy as np
-import msvcrt
 
 import expyriment as xpy
 import trajtracker as ttrk
@@ -354,9 +353,10 @@ def save_script(dll_path, device_id, reverse_horizontal, reverse_vertical,
         args += ", reverse_up_down=True"
 
     commands = [
+        "import tsc2017",
         "device_id = '{:}'".format(device_id),
         "dll_path = '{:}'".format(dll_path),
-        "touchpad = tsc2017.Touchpad(dll_path{:})".format(args),
+        "touchpad = tsc2017.Touchpad(dll_path=dll_path, {:})".format(args),
         "touchpad.connect(device_id)",
     ]
 
@@ -367,7 +367,7 @@ def save_script(dll_path, device_id, reverse_horizontal, reverse_vertical,
 
     #-- Save script
     out_dir = os.getcwd()
-    out_file = out_dir + os.sep + "init_tsc_command.py"
+    out_file = out_dir + os.sep + "dror_init_tsc.py"
     with open(out_file, 'w') as fp:
         fp.write("#\n")
         fp.write("# Paste the following commands in your script to connect with the TSC2017 device\n")
