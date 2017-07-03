@@ -14,6 +14,7 @@
 
 
 typedef struct {
+	int valid;  // Whether valid information was returned
 	int touched;
 	float x, y;
 } touch_info;

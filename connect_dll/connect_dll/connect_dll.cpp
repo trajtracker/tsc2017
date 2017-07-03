@@ -193,13 +193,14 @@ CONNECT_DLL_API void disconnect(ViSession resource)
 //-- Argument: a device created by connect()
 CONNECT_DLL_API touch_info get_touch_info(ViSession resource)
 {
-	touch_info ti = {0, 0, 0};
+	touch_info ti = {0, 0, 0, 0};
 
 	if (last_event.nbytes == 0)
 	{
 		return ti;
 	}
 
+	ti.valid = 1;
 	ti.touched = last_event.clicked();
 	ti.x = last_event.x();
 	ti.y = last_event.y();
