@@ -67,9 +67,9 @@ touchpad_full_size = (4096, 4096)
 class Touchpad(object):
 
     #------------------------------------------------------------
-    def __init__(self, output_screen_size, dll_path=_default_dll_path,
+    def __init__(self, dll_path=_default_dll_path,
                  reverse_left_right=False, reverse_up_down=False,
-                 touchpad_center=(0, 0), touchpad_size=touchpad_full_size):
+                 output_screen_size=None, touchpad_center=(0, 0), touchpad_size=touchpad_full_size):
         """
         Initialize the Touchpad object.
 
@@ -221,13 +221,15 @@ class Touchpad(object):
         :func:`~tsc2017.Touchpad.get_data` will return the touch positions using this coordinate space, with (0, 0)
         denoting the middle of the screen.
 
+        If this is not defined (None), the touchpad's coordinates will not be scaled.
+
         :type: tuple (width, height)
         """
         return self._output_screen_size
 
     @output_screen_size.setter
     def output_screen_size(self, value):
-        if not is_coord(value):
+        if value is not None and not is_coord(value):
             raise TypeError("{:}.output_screen_size was set to incorrect value: {:}".format(type(self).__name__, value))
         self._output_screen_size = value
 
@@ -303,7 +305,8 @@ class Touchpad(object):
         y += self._touchpad_center[1]
 
         #-- Rescale
-        x = int(x * self._output_screen_size[0] / self._touchpad_size[0])
-        y = int(y * self._output_screen_size[1] / self._touchpad_size[1])
+        if self._output_screen_size is not None:
+            x = int(x * self._output_screen_size[0] / self._touchpad_size[0])
+            y = int(y * self._output_screen_size[1] / self._touchpad_size[1])
 
         return TouchInfo(data.touched, x, y)
