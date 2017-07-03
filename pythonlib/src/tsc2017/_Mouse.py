@@ -30,7 +30,7 @@ class Mouse(object):
         if button_number != 0:
             raise ValueError("tsc2017.{:}.check_button_pressed() got invalid button_number ({:}), only button #0 is supported".
                              format(type(self).__name__, button_number))
-        data = self._touchpad.get_data()
+        data = self._touchpad.get_touch_data()
         return data[0]
 
     #----------------------------------------------------------------
@@ -52,7 +52,7 @@ class Mouse(object):
 
         :return: (x, y) coordinates
         """
-        touched, x, y = self._touchpad.get_data()
+        touched, x, y = self._touchpad.get_touch_data()
         if touched:
             return x, y
         else:

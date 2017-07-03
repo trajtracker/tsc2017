@@ -12,6 +12,24 @@ import numpy as np
 _default_dll_path = os.environ['WINDIR'] + "\\System\\"
 
 
+
+#-----------------------------------------------------------------
+class TouchInfo(object):
+    def __init__(self, touched, x, y):
+        self.touched = touched
+        self.x = x
+        self.y = y
+
+
+class TSCError(Exception):
+    def __init__(self, message):
+        self.message = message
+
+    def __str__(self):
+        return "{:}: {:}".format(type(self).__name__, self.message)
+
+
+
 #------------------------------------------------------------
 class DLLFuncs(object):
 
@@ -26,20 +44,19 @@ class DLLFuncs(object):
 
 #-----------------------------------------------------------------
 #-- The value returned from the DLL's get_touch_info() function
-class TouchInfo(ctypes.Structure):
+class DLLTouchInfo(ctypes.Structure):
     _fields_ = ("touched", ctypes.c_int), ("x", ctypes.c_float), ("y", ctypes.c_float)  #, ("z", ctypes.c_float)
 
-
+#-----------------------------------------------------------------
 def is_collection(value, allow_set=True):
     val_methods = dir(value)
     return "__len__" in val_methods and "__iter__" in val_methods and \
            (allow_set or "__getitem__" in val_methods) and not isinstance(value, str)
 
-
+#-----------------------------------------------------------------
 def is_coord(value):
     return is_collection(value) and len(value) == 2 and \
            isinstance(value[0], int) and isinstance(value[1], int)
-
 
 #=================================================================================================
 
@@ -68,7 +85,7 @@ class Touchpad(object):
         self._resource_manager = self._library.create_resource_manager()
 
         if self._resource_manager == 0:
-            raise Exception('Could not create a resource manager')
+            raise TSCError('Could not create a resource manager')
 
         self._resource = None
         self.reverse_left_right = reverse_left_right
@@ -109,7 +126,7 @@ class Touchpad(object):
                      ((1, "resource_mgr"), (1, "resource_name")))
 
         lib.add_func("get_touch_info", "get_touch_info",
-                     ctypes.WINFUNCTYPE(TouchInfo, ctypes.c_uint32),
+                     ctypes.WINFUNCTYPE(DLLTouchInfo, ctypes.c_uint32),
                      ((1, "resource"), ))
 
         self._library = lib
@@ -208,7 +225,7 @@ class Touchpad(object):
         # noinspection PyUnresolvedReferences
         resource = self._library.connect(ctypes.c_uint32(self._resource_manager), ctypes.c_char_p(device_name))
         if resource == 0:
-            raise Exception('Could not connect to device {:}'.format(device_name))
+            raise TSCError('Could not connect to device {:}'.format(device_name))
 
         self._resource = resource
 
@@ -223,7 +240,7 @@ class Touchpad(object):
             self._resource = None
 
     #------------------------------------------------------------
-    def get_data(self):
+    def get_touch_data(self):
         """
         Get touch data from the TSC2017 device.
 
@@ -233,7 +250,7 @@ class Touchpad(object):
         """
 
         if self._resource is None:
-            raise Exception("Invalid state: {:}.get_data() cannot be called before connect()".format(type(self).__name__))
+            raise TSCError("Invalid state: {:}.get_data() cannot be called before connect()".format(type(self).__name__))
 
         # noinspection PyUnresolvedReferences
         data = self._library.get_touch_info(ctypes.c_uint32(self._resource))
@@ -255,7 +272,7 @@ class Touchpad(object):
             x = int(x * self._output_screen_size[0] / self.touchpad_x_resolution())
             y = int(y * self._output_screen_size[1] / self.touchpad_y_resolution())
 
-        return data.touched, x, y
+        return TouchInfo(data.touched, x, y)
 
     #------------------------------------------------------------
     def touchpad_x_resolution(self):

@@ -1,6 +1,6 @@
 
 import tsc2017
-from tsc2017._tsc2017 import TouchInfo
+from tsc2017._tsc2017 import DLLTouchInfo
 
 
 class _DummyTouchpadLib(object):
@@ -27,7 +27,7 @@ class TestTouchpad(tsc2017.Touchpad):
 
 
     def _get_touch_info_impl(self):
-        ti = TouchInfo()
+        ti = DLLTouchInfo()
         ti.touched = self._data[0]
         ti.x = self._data[1]
         ti.y = self._data[2]
