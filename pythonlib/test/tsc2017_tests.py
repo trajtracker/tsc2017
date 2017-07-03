@@ -51,7 +51,7 @@ class Tsc2017Tests(unittest.TestCase):
         tp = TestTouchpad()
         tp.connect("dummy")
         tp.data = True, 3048, 3048
-        tp.output_center = (500, 500)
+        tp.touchpad_center = (500, 500)
         self.assertEqual((True, 1500, 1500), get_touch_data(tp))
 
     #------------------------------------------------------------------------------
@@ -59,7 +59,7 @@ class Tsc2017Tests(unittest.TestCase):
         tp = TestTouchpad()
         tp.connect("dummy")
         tp.data = True, 3048, 3048
-        tp.output_center = (500, 500)
+        tp.touchpad_center = (500, 500)
         tp.reverse_left_right = True
         self.assertEqual((True, -500, 1500), get_touch_data(tp))
 

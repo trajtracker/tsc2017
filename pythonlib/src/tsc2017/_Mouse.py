@@ -16,6 +16,8 @@ class Mouse(object):
         """
         if not isinstance(touchpad, Touchpad):
             raise TypeError("Invalid 'touchpad' argument - expecting a tsc2017.Touchpad object")
+        if ttrk_mouse is None:
+            raise TypeError("The 'ttrk_mouse' is None. You should initialize the TSC2017 as mouse only after calling trajtracker.initialize()")
         self._touchpad = touchpad
         self._ttrk_mouse = ttrk_mouse
 
@@ -30,8 +32,7 @@ class Mouse(object):
         if button_number != 0:
             raise ValueError("tsc2017.{:}.check_button_pressed() got invalid button_number ({:}), only button #0 is supported".
                              format(type(self).__name__, button_number))
-        data = self._touchpad.get_touch_data()
-        return data[0]
+        return self._touchpad.get_touch_data().touched
 
     #----------------------------------------------------------------
     def show_cursor(self, show):
@@ -52,8 +53,8 @@ class Mouse(object):
 
         :return: (x, y) coordinates
         """
-        touched, x, y = self._touchpad.get_touch_data()
-        if touched:
-            return x, y
+        ti = self._touchpad.get_touch_data()
+        if ti.touched:
+            return ti.x, ti.y
         else:
             return 0, 0

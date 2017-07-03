@@ -344,7 +344,7 @@ def save_script(dll_path, device_id, reverse_horizontal, reverse_vertical,
     # noinspection PyUnresolvedReferences
     height = np.abs(top_bound - bottom_bound)
 
-    args = "output_center=({:}, {:}), output_screen_size=({:}, {:})".format(mid_x, mid_y, width, height)
+    args = "output_center=({:}, {:}), touchpad_size=({:}, {:})".format(mid_x, mid_y, width, height)
 
     if reverse_horizontal:
         args += ", reverse_left_right=True"
@@ -353,11 +353,17 @@ def save_script(dll_path, device_id, reverse_horizontal, reverse_vertical,
         args += ", reverse_up_down=True"
 
     commands = [
+        "",
+        "# Paste the following lines around the beginning of your python script",
         "import tsc2017",
+        "import trajtracker as ttrk",
         "device_id = '{:}'".format(device_id),
-        "dll_path = '{:}'".format(dll_path),
-        "touchpad = tsc2017.Touchpad(dll_path=dll_path, {:})".format(args),
+        "dll_path = '{:}'".format(dll_path.replace("\\", "\\\\")),
+        "",
+        "# Paste the following lines only after calling trajtracker.initialize()",
+        "touchpad = tsc2017.Touchpad(dll_path=dll_path, {:}, output_screen_size=ttrk.env.screen_size)".format(args),
         "touchpad.connect(device_id)",
+        "ttrk.env.mouse = tsc2017.Mouse(touchpad, ttrk.env.mouse)",
     ]
 
     script = "".join([c + "\n" for c in commands])

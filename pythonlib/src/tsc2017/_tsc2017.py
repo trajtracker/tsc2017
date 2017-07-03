@@ -45,7 +45,7 @@ class DLLFuncs(object):
 #-----------------------------------------------------------------
 #-- The value returned from the DLL's get_touch_info() function
 class DLLTouchInfo(ctypes.Structure):
-    _fields_ = ("touched", ctypes.c_int), ("x", ctypes.c_float), ("y", ctypes.c_float)  #, ("z", ctypes.c_float)
+    _fields_ = ("valid", ctypes.c_int), ("touched", ctypes.c_int), ("x", ctypes.c_float), ("y", ctypes.c_float)  #, ("z", ctypes.c_float)
 
 #-----------------------------------------------------------------
 def is_collection(value, allow_set=True):
@@ -60,24 +60,29 @@ def is_coord(value):
 
 #=================================================================================================
 
+
+touchpad_full_size = (4096, 4096)
+
+
 class Touchpad(object):
 
     #------------------------------------------------------------
-    def __init__(self, dll_path=_default_dll_path,
+    def __init__(self, output_screen_size, dll_path=_default_dll_path,
                  reverse_left_right=False, reverse_up_down=False,
-                 output_center=(0, 0), output_screen_size=None):
+                 touchpad_center=(0, 0), touchpad_size=touchpad_full_size):
         """
         Initialize the Touchpad object.
+
+        :param output_screen_size: See :attr:`~tsc2017.Touchpad.output_screen_size`
 
         :param dll_path: The full path to the tsc_connect.dll file. If you do not have this file,
                          dowload it from `here <https://github.com/trajtracker/tsc2017/raw/master/lib/connect_dll.dll>`_
         :type dll_path: str
 
-        :param reverse_left_right: Whether to reverse the TSC2017-provided coordinates horizontally
-        :type reverse_left_right: bool
-
-        :param reverse_up_down: Whether to reverse the TSC2017-provided coordinates vertically
-        :type reverse_up_down: bool
+        :param reverse_left_right: See :attr:`~tsc2017.Touchpad.reverse_left_right`
+        :param reverse_up_down: See :attr:`~tsc2017.Touchpad.reverse_up_down`
+        :param touchpad_center: See :attr:`~tsc2017.Touchpad.touchpad_center`
+        :param touchpad_size: See :attr:`~tsc2017.Touchpad.touchpad_size`
         """
 
         self._init_dll(dll_path)
@@ -90,8 +95,11 @@ class Touchpad(object):
         self._resource = None
         self.reverse_left_right = reverse_left_right
         self.reverse_up_down = reverse_up_down
-        self.output_center = output_center
+        self.touchpad_center = touchpad_center
         self.output_screen_size = output_screen_size
+        self.touchpad_size = touchpad_size
+
+        self._last_touch_data = None
 
     #------------------------------------------------------------
     def __del__(self):
@@ -171,35 +179,55 @@ class Touchpad(object):
 
     #------------------------------------------------------------
     @property
-    def output_center(self):
+    def touchpad_center(self):
         """
-        This attribute controls the coordinate space returned by :func:`~tsc2017.Touchpad.get_data` :
-        it defines the coordinate corresponding with the center of the touchpad
+        The coordinates of the touchpad's center, using its own resolution.
+
+        (0, 0) is the theoretical center, but it might be slightly different due to physical assymetry in the device.
 
         :type: tuple (x, y)
         """
-        return self.output_center
+        return self._touchpad_center
 
-    @output_center.setter
-    def output_center(self, value):
+    @touchpad_center.setter
+    def touchpad_center(self, value):
         if not is_coord(value):
             raise TypeError("{:}.output_center was set to incorrect value: {:}".format(type(self).__name__, value))
-        self._output_center = value
+        self._touchpad_center = value
+
+    #------------------------------------------------------------
+    @property
+    def touchpad_size(self):
+        """
+        The size of the touchpad, using its own coordinate space.
+        The size reported by the manufacturer is 4096 x 4096, however, the real touch-sensitive size may be slightly smaller
+
+        :type: tuple (width, height)
+        """
+        return self._touchpad_size
+
+    @touchpad_size.setter
+    def touchpad_size(self, value):
+        if not is_coord(value):
+            raise TypeError("{:}.touchpad_size was set to incorrect value: {:}".format(type(self).__name__, value))
+        self._touchpad_size = value
 
     #------------------------------------------------------------
     @property
     def output_screen_size(self):
         """
-        This attribute controls the coordinate space returned by :func:`~tsc2017.Touchpad.get_data` :
-        it defines the size of the virtual screen (returned by get_data()) corresponding with the full touchpad area
+        The size of the screen.
+
+        :func:`~tsc2017.Touchpad.get_data` will return the touch positions using this coordinate space, with (0, 0)
+        denoting the middle of the screen.
 
         :type: tuple (width, height)
         """
-        return self.output_screen_size
+        return self._output_screen_size
 
     @output_screen_size.setter
     def output_screen_size(self, value):
-        if value is not None and not is_coord(value):
+        if not is_coord(value):
             raise TypeError("{:}.output_screen_size was set to incorrect value: {:}".format(type(self).__name__, value))
         self._output_screen_size = value
 
@@ -255,28 +283,27 @@ class Touchpad(object):
         # noinspection PyUnresolvedReferences
         data = self._library.get_touch_info(ctypes.c_uint32(self._resource))
 
+        if not data.valid:
+            #-- No data available: get again the last available touch information
+            if self._last_touch_data is None:
+                return TouchInfo(False, 0, 0)
+
+            data = self._last_touch_data
+
         #-- Get x, y coordinates, where (0, 0) is the center of the touchpad
-        x = int(np.round(data.x - self.touchpad_x_resolution() / 2))
-        y = int(np.round(data.y - self.touchpad_y_resolution() / 2))
+        x = int(np.round(data.x - touchpad_full_size[0] / 2))
+        y = int(np.round(data.y - touchpad_full_size[1] / 2))
 
         #-- Flip if needed
         x = -x if self._reverse_left_right else x
         y = -y if self._reverse_up_down else y
 
         #-- Move to required center
-        x += self._output_center[0]
-        y += self._output_center[1]
+        x += self._touchpad_center[0]
+        y += self._touchpad_center[1]
 
         #-- Rescale
-        if self._output_screen_size is not None:
-            x = int(x * self._output_screen_size[0] / self.touchpad_x_resolution())
-            y = int(y * self._output_screen_size[1] / self.touchpad_y_resolution())
+        x = int(x * self._output_screen_size[0] / self._touchpad_size[0])
+        y = int(y * self._output_screen_size[1] / self._touchpad_size[1])
 
         return TouchInfo(data.touched, x, y)
-
-    #------------------------------------------------------------
-    def touchpad_x_resolution(self):
-        return 4096
-
-    def touchpad_y_resolution(self):
-        return 4096
