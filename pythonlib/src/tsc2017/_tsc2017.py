@@ -7,6 +7,7 @@ from __future__ import division
 import os
 import ctypes
 import numpy as np
+import numbers
 
 
 #-----------------------------------------------------------------
@@ -51,9 +52,10 @@ def is_collection(value, allow_set=True):
 
 
 #-----------------------------------------------------------------
-def is_coord(value):
+def is_coord(value, allow_float=False):
+    elem_type = numbers.Number if allow_float else int
     return is_collection(value) and len(value) == 2 and \
-           isinstance(value[0], int) and isinstance(value[1], int)
+           isinstance(value[0], elem_type) and isinstance(value[1], elem_type)
 
 #=================================================================================================
 
@@ -148,7 +150,7 @@ class Touchpad(object):
 
     @scale_coords_by.setter
     def scale_coords_by(self, value):
-        if value is not None and not is_coord(value):
+        if value is not None and not is_coord(value, allow_float=True):
             raise TypeError("{:}.scale_coords_by was set to an incorrect value ({:})".
                             format(type(self).__name__, value))
         self._scale_coords_by = value
