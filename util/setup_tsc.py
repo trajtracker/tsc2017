@@ -344,7 +344,7 @@ def save_script(dll_path, device_id, reverse_horizontal, reverse_vertical,
     # noinspection PyUnresolvedReferences
     height = np.abs(top_bound - bottom_bound)
 
-    args = "output_center=({:}, {:}), touchpad_size=({:}, {:})".format(mid_x, mid_y, width, height)
+    args = "touchpad_center=({:}, {:}), touchpad_size=({:}, {:})".format(mid_x, mid_y, width, height)
 
     if reverse_horizontal:
         args += ", reverse_left_right=True"
