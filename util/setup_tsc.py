@@ -187,7 +187,7 @@ def save_script(dll_path, device_id, shift_factors, scale_factors):
 
     #-- Save script
     out_dir = os.getcwd()
-    out_file = out_dir + os.sep + "dror_init_tsc.py"
+    out_file = out_dir + os.sep + "results_to_paste_in_your_script.py"
     with open(out_file, 'w') as fp:
         fp.write("#\n")
         fp.write("# Paste the following commands in your script to connect with the TSC2017 device\n")
