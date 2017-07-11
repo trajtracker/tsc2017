@@ -10,5 +10,6 @@ TSC2017 for TrajTracker
    :maxdepth: 1
    :glob:
 
+   how_to_configure
    Mouse
    Touchpad
