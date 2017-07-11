@@ -4,3 +4,6 @@ Debug
 Release
 .vs
 docs/build
+util/data
+util/events
+results_to_paste_in_your_script.py
