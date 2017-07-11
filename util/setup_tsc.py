@@ -1,19 +1,15 @@
-##############################################################################################################
-#
-# Utility for testing and calibrating the TSC2017: see that it works well, and adapt its coordinate space
-# with TrajTracker's
-#
-##############################################################################################################
+
+from __future__ import division
 
 import os
+import random
 import time
-import numpy as np
+import sklearn.linear_model as lin
 
 import expyriment as xpy
 import trajtracker as ttrk
-import trajtracker.utils as u
 
-from tsc2017 import Touchpad, TSCError
+from tsc2017 import Touchpad
 import setup_utils as sut
 
 
@@ -24,14 +20,7 @@ import setup_utils as sut
 #-- To simulate this app with mouse rather than with the real touchpad
 simulate_with_mouse = False
 
-test_directions = True
-test_bounds = True
-
-#===============================================================================================
-
-axis_adverb = ['horizontally', 'vertically']
-direction_per_axis = [['left', 'right'], ['down', 'up']]
-side_per_axis = [['left', 'right'], ['bottom', 'top']]
+n_pointings_per_quarter = 3
 
 
 #---------------------------------------------------------------------------
@@ -43,314 +32,137 @@ def main():
     print("-------------------------------------------------")
     print("")
 
-    device_id = "N/A"
-    dll_path = "N/A"
+    xpy.control.defaults.window_mode = True
+    ttrk.log_to_console = True
+    exp = ttrk.initialize()
+    xpy.control.start(exp)
 
     if simulate_with_mouse:
-        xpy.control.defaults.window_mode = True
-        ttrk.log_to_console = True
-
-        exp = ttrk.initialize()
-        xpy.control.start(exp)
         exp.mouse.show_cursor()
         touchpad = sut.TouchpadMouseSimulator(exp, ttrk.env.mouse)
+        dll_path = "N/A"
+        device_id = "N/A"
 
     else:
-        dll_path = get_dll_path()
+        dll_path = sut.get_dll_path()
         dll_path += "\\connect_tsc.dll"
         touchpad = Touchpad(dll_path)
-        device_id = connect_to_device(touchpad)
+        device_id = sut.connect_to_device(touchpad)
 
-    reverse_vertical = False
-    reverse_horizontal = False
+    target_positions = generate_positions()
+    marked_positions = ask_to_mark(target_positions, touchpad)
 
-    if test_directions:
+    print("target = {:}".format(target_positions))
+    print("marked = {:}".format(marked_positions))
 
-        print("")
-        print("-------------------------------------------------")
-        print("     Testing movement directions")
-        print("-------------------------------------------------")
+    intercepts, scale_factors = get_scaling_factors(target_positions, marked_positions)
+
+    save_script(dll_path, device_id, intercepts, scale_factors)
+
+    xpy.control.end()
+
+
+#---------------------------------------------------------------------------
+def generate_positions():
+    """
+    Generate random positions to which the user will then point
+    """
+    width, height = ttrk.env.screen_size
+
+    max_x = int(width * 0.4)  # don't get too far to the end of the scree
+    min_x = int(max_x * 0.15)
+
+    max_y = int(height * 0.4)
+    min_y = int(max_y * 0.15)
+
+    positions = []
+
+    for xdir in (-1, 1):
+        for ydir in (-1, 1):
+            for i in range(n_pointings_per_quarter):
+                x = random.randint(min_x, max_x)
+                y = random.randint(min_y, max_y)
+                positions.append((int(x * xdir), int(y * ydir)))
+
+    return positions
+
+
+#---------------------------------------------------------------------------
+def ask_to_mark(target_positions, touchpad):
+
+    marked_positions = []
+
+    msg = xpy.stimuli.TextBox(text="Click the point", text_font="Arial", text_size=14, size=(200, 30), position=(0, 0))
+    msg2 = xpy.stimuli.TextBox(text="Good!", text_font="Arial", text_size=14, size=(200, 30), position=(0, 0),
+                               text_colour=xpy.misc.constants.C_GREEN)
+    point = xpy.stimuli.Circle(radius=2, colour=xpy.misc.constants.C_WHITE)
+
+    for i in range(len(target_positions)):
+
+        msg.text = "Click the point ({:}/{:})".format(i+1, len(target_positions))
+        print(msg.text)
+
+        msg.present(update=False)
+
+        point.position = target_positions[i]
+        point.present(clear=False)
 
         while True:
 
-            print("\nPlease move your finger UPWARDS on the touchpad slowly, several times")
-            is_up_positive = get_movement_direction_along_axis(1, touchpad, min_movements=3)
+            td = touchpad.get_touch_data()
+            if td.touched:
+                pos = (td.x, td.y)
+                print("Displayed at {:}, touched at {:}".format(target_positions[i], pos))
+                marked_positions.append(pos)
+                msg2.present()
 
-            print("\nPlease move your finger DOWNWARDS on the touchpad slowly, several times")
-            is_down_positive = get_movement_direction_along_axis(1, touchpad, min_movements=3)
+                #-- wait until finger lifted, plus a little longer
+                if i+1 < len(target_positions):
+                    while touchpad.get_touch_data().touched:
+                        time.sleep(0.02)
+                    time.sleep(0.5)
 
-            if is_up_positive == is_down_positive:
-                print("\nProblem: it seems that you moved your finger in the same direction both when I asked you to move upwards and downwards. Try again.")
-            else:
-                reverse_vertical = is_down_positive
-                print("\n>>> Conclusion: TSC2017's positive coordinates are on the {:}".format("top" if is_up_positive else "bottom"))
                 break
-
-        while True:
-
-            print("\nPlease move your finger LEFTWARDS on the touchpad slowly, several times")
-            is_left_positive = get_movement_direction_along_axis(0, touchpad, min_movements=3)
-
-            print("\nPlease move your finger RIGHTWARDS on the touchpad slowly, several times")
-            is_right_positive = get_movement_direction_along_axis(0, touchpad, min_movements=3)
-
-            if is_left_positive == is_right_positive:
-                print("\nProblem: it seems that you moved your finger in the same direction both when I asked you to move left and right. Try again.")
             else:
-                reverse_horizontal = is_left_positive
-                print("\n>>> Conclusion: TSC2017's positive coordinates are on the {:}".format("left" if is_left_positive else "right"))
-                break
+                time.sleep(0.02)
 
-    print("")
-    print("-------------------------------------------------")
-    print("     Detecting touchpad boundaries")
-    print("-------------------------------------------------")
-    print("")
+            xpy.io.Keyboard.process_control_keys()
 
-    if test_bounds:
-        top_bound = detect_bounds(touchpad, 1, True, reverse_vertical)
-        bottom_bound = detect_bounds(touchpad, 1, False, reverse_vertical)
-        left_bound = detect_bounds(touchpad, 0, False, reverse_horizontal)
-        right_bound = detect_bounds(touchpad, 0, True, reverse_horizontal)
-        print("\n>>> Touchpad boundaries: top={:}, bottom={:}, left={:}, right={:}".format(top_bound, bottom_bound, left_bound, right_bound))
+    msg2.text = "Thank you"
+    msg.present()
+    time.sleep(0.5)
 
-    else:
-        top_bound = 0
-        bottom_bound = 0
-        left_bound = 0
-        right_bound = 0
-
-    print("-------------------------------------------------")
-    print("     Visual test")
-    print("-------------------------------------------------")
-
-    print("Now, move your finger around the touchpad. A dot should appear on screen in the corresponding location.")
-    print("Check that the dot is moving in accordance with your finger. Press <SPACE> when you're finished")
-
-    print("Did the dot move according to your finger movement?")
-
-    print("-------------------------------------------------")
-    print("     Calibration finished")
-    print("-------------------------------------------------")
-
-    save_script(dll_path, device_id, reverse_horizontal, reverse_vertical,
-                top_bound, bottom_bound, left_bound, right_bound)
-
-    if simulate_with_mouse:
-        xpy.control.end()
+    return marked_positions
 
 
 #---------------------------------------------------------------------------
-# Get the path to CONNECT_TSC.DLL
-#
-def get_dll_path():
-    while True:
-        dll_path = raw_input("Enter the path to CONNECT_TSC.DLL: ")
-        if os.path.isdir(dll_path):
-            return dll_path
-        elif os.path.isfile(dll_path):
-            print("Please indicate the directory name, not a file name.")
-        else:
-            print("Directory does not exist. Try again.")
-
-
-#---------------------------------------------------------------------------
-def connect_to_device(touchpad):
-
-    print("")
-    print("The USB device ID (which you can see in the NI-MAX application) should be")
-    print("USB0::0x0451::0x2FD7::NI-VISA-#####::3::RAW, where '#####' is a sequence of digits")
-
-    while True:
-        device_id_num = raw_input("Please type this digit sequence:")
-        device_id = "USB0::0x0451::0x2FD7::NI-VISA-{:}::3::RAW".format(device_id_num)
-        print("Trying to connect to {:}".format(device_id))
-        try:
-            touchpad.connect(device_id)
-            print("Succeeded")
-            return device_id
-        except TSCError:
-            print("Cannot connect to this device. Please double-check and try again.")
-
-
-#---------------------------------------------------------------------------
-# Get movement data and:
-# 1. Make sure that the main movement is along the specified axis and not the other axis
-# 2. Check the movement direction along that axis (positive or negative)
-def get_movement_direction_along_axis(axis, touchpad, min_movement_duration=0.5, min_movements=1):
-
-    n_negative = 0
-    n_positive = 0
-
-    dir_name = {True: '+', False: '-'}
-
-    while True:
-        is_positive, xy = get_one_movement_along_axis(axis, touchpad, min_movement_duration)
-        print("Detected a movement in direction {:}".format(dir_name[is_positive]))
-        n_positive += int(is_positive)
-        n_negative += int(not is_positive)
-        # noinspection PyUnresolvedReferences
-        if np.abs(n_positive - n_negative) >= min_movements:
-            break
-
-    return n_positive > n_negative
-
-
-#---------------------------------------------------------------------------
-# Get movement data and:
-# 1. Make sure that the main movement is along the specified axis and not the other axis
-# 2. Check the movement direction along that axis (positive or negative)
-# noinspection PyTypeChecker
-def get_one_movement_along_axis(axis, touchpad, min_movement_duration=0.5):
-
-    other_axis = 1 - axis
-
-    while True:
-
-        movement_time, x, y = get_movement(touchpad)
-        xy = x, y
-
-        if movement_time < min_movement_duration:
-            print("The movement was too short ({:.1f} seconds, expecting at least {:.1f}), try again".format(movement_time, min_movement_duration))
-            continue
-
-        std_xy = np.std(x), np.std(y)
-        if std_xy[other_axis] > std_xy[axis]:
-            print("You moved {:} instead of {:}; try again".format(axis_adverb[other_axis], axis_adverb[axis]))
-            continue
-
-        if std_xy[other_axis] > std_xy[axis] / 2:
-            print("You should have moved {:} but you also moved {:}. Try again".format(axis_adverb[axis], axis_adverb[other_axis]))
-            continue
-
-        d = np.diff(xy[axis])
-        n_pos = sum(d > 0)
-        n_neg = sum(d < 0)
-
-        if n_pos > 2 * n_neg:
-            return True, xy[axis]
-
-        if n_neg > 2 * n_pos:
-            return False, xy[axis]
-
-        print "I am not sure if you moved {:} or {:}, please try again".format(direction_per_axis[axis][0], direction_per_axis[axis][1])
-
-
-#---------------------------------------------------------------------------
-def detect_bounds(touchpad, axis, positive, axis_reversed, min_movement_duration=0.3):
-
-    direction_ind = (1-positive) if axis_reversed else int(positive)
-    side_name = side_per_axis[axis][direction_ind]
-
-    print("")
-    print("")
-    print("Detecting the touchpad's {:} border".format(side_name.upper()))
-    print("")
-
-    bounds = [
-        detect_movement_towards_bound(touchpad, axis, positive, axis_reversed, 0, min_movement_duration),
-        detect_movement_towards_bound(touchpad, axis, positive, axis_reversed, 0, min_movement_duration),
-        detect_movement_towards_bound(touchpad, axis, positive, axis_reversed, 2, min_movement_duration),
-        detect_movement_towards_bound(touchpad, axis, positive, axis_reversed, 2, min_movement_duration),
-        detect_movement_towards_bound(touchpad, axis, positive, axis_reversed, 1, min_movement_duration),
-        detect_movement_towards_bound(touchpad, axis, positive, axis_reversed, 1, min_movement_duration),
-    ]
-
-    print("End-of-touchpad boundary: {:}".format(bounds))
-    if max(bounds) - min(bounds) > 100:
-        print ">>> PROBLEM: The bounds information is inconclusive - large variance"
-
-    return int(np.average(bounds))
-
-
-#---------------------------------------------------------------------------
-def detect_movement_towards_bound(touchpad, axis, expect_positive, axis_reversed, move_on, min_movement_duration):
+def get_scaling_factors(target_positions, marked_positions):
+    """
+    Compute how the marked coordinates should be scaled to match the target coordinates
+    :return: tuple (intercepts, scales): each of the two is a tuple with 2 elements (x, y)
     """
 
-    :param touchpad:
-    :param axis: 0 or 1
-    :param expect_positive: Whether the finger should move in the positive direction (up or right)
-    :param axis_reversed: Whether the touchpad reverses this axis info
-    :param move_on: On which screen location to move: 0=left/bottom, 1=right/top, 2=middle
-    :param min_movement_duration: in seconds
-    :return: The bound (int)
-    """
+    regression = lin.LinearRegression()
+    intercepts = []
+    scales = []
 
-    direction_ind = (1 - expect_positive) if axis_reversed else int(expect_positive)
-    bound_direction_name = direction_per_axis[axis][direction_ind]
-    orthogonal_direction = side_per_axis[1-axis][move_on] if move_on in (0, 1) else "middle"
+    for coord in 0, 1:
 
-    while True:
+        target = [c[coord] for c in target_positions]
+        marked = [[c[coord]] for c in marked_positions]
 
-        print("\nPlease place your finger on the {:} of the touchpad and move it {:} until it exits the touchpad".
-              format(orthogonal_direction, bound_direction_name))
-        print("   DO NOT LIFT YOUR FINGER BEFORE IT LEAVES THE TOUCHPAD")
+        regression.fit(marked, target)
+        intercepts.append(regression.intercept_)
+        scales.append(regression.coef_[0])
 
-        #-- Get the movement
-        is_positive, x_or_y = get_one_movement_along_axis(axis, touchpad, min_movement_duration)
-        if is_positive != expect_positive:
-            print("You moved {:}wards instead of {:}wards. Please try again.".
-                  format(direction_per_axis[axis][1 - direction_ind], direction_per_axis[axis][direction_ind]))
-            continue
-
-        #-- Get the most extreme coordiante
-        bound = max(x_or_y) if expect_positive else min(x_or_y)
-
-        print("Good! bound = {:}".format(bound))
-
-        return bound
+    return tuple(intercepts), tuple(scales)
 
 
 #---------------------------------------------------------------------------
-# Get movement data and:
-# 1. Make sure that the main movement is along the specified axis and not the other axis
-# 2. Check the movement direction along that axis (positive or negative)
-def get_movement(touchpad):
+def save_script(dll_path, device_id, shift_factors, scale_factors):
 
-    raw_input("Hit <ENTER> before you start moving")
-    print("OK, go now")
-
-    #-- Wait until touchpad is touched
-    while not touchpad.get_touch_data().touched:
-        time.sleep(0.01)
-
-    start_time = u.get_time()
-
-    x = []
-    y = []
-
-    #-- Get movement data
-    while True:
-        td = touchpad.get_touch_data()
-        if not td.touched:
-            break
-
-        x.append(td.x)
-        y.append(td.y)
-
-    movement_time = u.get_time() - start_time
-
-    return movement_time, x, y
-
-
-#---------------------------------------------------------------------------
-def save_script(dll_path, device_id, reverse_horizontal, reverse_vertical,
-                top_bound, bottom_bound, left_bound, right_bound):
-
-    mid_x = int((left_bound + right_bound) / 2)
-    mid_y = int((top_bound + bottom_bound) / 2)
-    # noinspection PyUnresolvedReferences
-    width = np.abs(left_bound - right_bound)
-    # noinspection PyUnresolvedReferences
-    height = np.abs(top_bound - bottom_bound)
-
-    args = "touchpad_center=({:}, {:}), touchpad_size=({:}, {:})".format(mid_x, mid_y, width, height)
-
-    if reverse_horizontal:
-        args += ", reverse_left_right=True"
-
-    if reverse_vertical:
-        args += ", reverse_up_down=True"
+    shift_factors = [ttrk.utils.round(x) for x in shift_factors]
+    scale_factors = [ttrk.utils.round(x * 10000) / 10000 for x in scale_factors]
 
     commands = [
         "",
@@ -359,9 +171,11 @@ def save_script(dll_path, device_id, reverse_horizontal, reverse_vertical,
         "import trajtracker as ttrk",
         "device_id = '{:}'".format(device_id),
         "dll_path = '{:}'".format(dll_path.replace("\\", "\\\\")),
+        "touchpad_scale_coords_factor = {:}, {:}".format(scale_factors[0], scale_factors[1]),
+        "touchpad_shift_coords_factor = {:}, {:}".format(shift_factors[0], shift_factors[1]),
         "",
         "# Paste the following lines only after calling trajtracker.initialize()",
-        "touchpad = tsc2017.Touchpad(dll_path=dll_path, {:}, output_screen_size=ttrk.env.screen_size)".format(args),
+        "touchpad = tsc2017.Touchpad(dll_path=dll_path, scale_coords_by=touchpad_scale_coords_factor, shift_coords_by=touchpad_shift_coords_factor)",
         "touchpad.connect(device_id)",
         "ttrk.env.mouse = tsc2017.Mouse(touchpad, ttrk.env.mouse)",
     ]
