@@ -148,7 +148,7 @@ class Touchpad(object):
 
     @scale_coords_by.setter
     def scale_coords_by(self, value):
-        if not is_coord(value):
+        if value is not None and not is_coord(value):
             raise TypeError("{:}.scale_coords_by was set to an incorrect value ({:})".
                             format(type(self).__name__, value))
         self._scale_coords_by = value
@@ -168,7 +168,7 @@ class Touchpad(object):
 
     @shift_coords_by.setter
     def shift_coords_by(self, value):
-        if not is_coord(value):
+        if value is not None and not is_coord(value):
             raise TypeError("{:}.shift_coords_by was set to an incorrect value ({:})".
                             format(type(self).__name__, value))
         self._shift_coords_by = value
