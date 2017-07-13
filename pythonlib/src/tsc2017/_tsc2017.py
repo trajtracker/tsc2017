@@ -96,7 +96,7 @@ class Touchpad(object):
         if hasattr(self, "_resource"):
             self.disconnect()
 
-        if hasattr(self, "_resource_manager"):
+        if hasattr(self, "_resource_manager") and ctypes is not None:   # ctypes may be None on program shutdown
             # noinspection PyUnresolvedReferences
             self._library.cleanup_resource_manager(ctypes.c_uint32(self._resource_manager))
 
