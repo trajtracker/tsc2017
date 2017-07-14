@@ -12,12 +12,20 @@ import numbers
 
 #-----------------------------------------------------------------
 class TouchInfo(object):
+
     def __init__(self, touched, x, y):
         self.touched = touched
         self.x = x
         self.y = y
 
+    def __str__(self):
+        if self.touched:
+            return "Touched ({:}, {:})".format(self.x, self.y)
+        else:
+            return "No touched"
 
+
+#-----------------------------------------------------------------
 class TSCError(Exception):
     def __init__(self, message):
         self.message = message
